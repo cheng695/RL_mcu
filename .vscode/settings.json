@@ -1,0 +1,12 @@
+{
+    "cmake.sourceDirectory": "${workspaceFolder}/RL_leg",
+    "cmake.useCMakePresets": "always",
+    "cmake.environment": {
+        "PATH": "${workspaceFolder}/.tools/arm/usr/bin:${env:PATH}"
+    },
+    "clangd.arguments": [
+        "--background-index",
+        "--query-driver=**/arm-none-eabi-gcc,**/arm-none-eabi-g++"
+    ],
+    "C_Cpp.intelliSenseEngine": "disabled"
+}

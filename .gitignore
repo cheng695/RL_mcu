@@ -1,0 +1,39 @@
+.tools/
+.cache/
+RL_leg/build/
+RL_leg/compile_commands.json
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Firmware build artifacts
+*.elf
+*.hex
+*.bin
+*.map
+*.list
+*.o
+*.d
+*.su
+
+# IDE and editor temporary files
+.vscode/.browse.*.db
+.vscode/ipch/
+.idea/
+*.user
+*.suo
+*.swp
+*.swo
+*~
+
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# OS metadata
+.DS_Store
+Thumbs.db

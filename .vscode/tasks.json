@@ -1,0 +1,20 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Debug",
+            "type": "process",
+            "command": "${workspaceFolder}/scripts/build.sh",
+            "args": ["Debug"],
+            "group": {"kind": "build", "isDefault": true},
+            "problemMatcher": ["$gcc"]
+        },
+        {
+            "label": "Flash Debug (J-Link SWD)",
+            "type": "process",
+            "command": "${workspaceFolder}/scripts/flash.sh",
+            "args": ["Debug"],
+            "problemMatcher": ["$gcc"]
+        }
+    ]
+}

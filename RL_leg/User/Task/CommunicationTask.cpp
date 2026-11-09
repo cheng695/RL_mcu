@@ -1,0 +1,145 @@
+#include "CommunicationTask.hpp"
+#include "RobotContext.hpp"
+#include "uart_device.hpp"
+#include <cstdint>
+
+/* 通讯数据缓存 ---------------------------------------------------------------------------------------------*/
+uint8_t BoardRx_buffer[BoardCommunication::RX_FRAME_SIZE];
+uint8_t BoardTx_buffer[BoardCommunication::TX_FRAME_SIZE];
+uint8_t send_str2[sizeof(float) * 11];  
+
+uint8_t DT7Rx_buffer[18];                  
+uint8_t HI12Rx_buffer[82];
+
+/* 板间通讯 ------------------------------------------------------------------------------------------------*/
+/**
+ * @brief 板件通讯串口接收回调与数据解�?
+ *
+ */
+void BoardCommunicationInit()
+{
+    auto &uart1 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart1);
+    auto &uart6 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart6);
+    auto &uart7 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart7);
+
+    HAL::UART::Data uart1_rx_buffer{DT7Rx_buffer, sizeof(DT7Rx_buffer)};
+    HAL::UART::Data uart6_rx_buffer{HI12Rx_buffer, sizeof(HI12Rx_buffer)};
+    HAL::UART::Data uart7_rx_buffer{BoardRx_buffer, sizeof(BoardRx_buffer)};
+
+    uart1.receive_dma_idle(uart1_rx_buffer);
+    uart6.receive_dma_idle(uart6_rx_buffer);
+    uart7.receive_dma_idle(uart7_rx_buffer);
+
+    uart1.register_rx_callback([](const HAL::UART::Data &data)
+    {
+        if (data.buffer != nullptr && data.size == sizeof(DT7Rx_buffer))
+        {
+            DT7.parseData(data.buffer); 
+        }
+    });
+
+    uart6.register_rx_callback([](const HAL::UART::Data &data)
+    {
+        if (data.buffer != nullptr && data.size == sizeof(HI12Rx_buffer))
+        {
+            HI12.DataUpdate(data.buffer);
+        }
+    });
+
+    uart7.register_rx_callback([](const HAL::UART::Data &data)
+    {
+        if (data.buffer != nullptr && data.size > 0)
+        {
+            Cboard.parseRX(data.buffer, data.size);
+        }
+    });
+}
+
+/**
+ * @brief vofa
+ *
+ */
+void vofa_send(float x1, float x2, float x3, float x4, float x5, float x6, float x7, float x8, float x9)
+{
+    const uint8_t sendSize = sizeof(float); 
+
+    // 浮点数据写入缓冲区（小端模式）
+    *((float*)&send_str2[sendSize * 0]) = x1;
+    *((float*)&send_str2[sendSize * 1]) = x2;
+    *((float*)&send_str2[sendSize * 2]) = x3;
+    *((float*)&send_str2[sendSize * 3]) = x4;
+    *((float*)&send_str2[sendSize * 4]) = x5;
+    *((float*)&send_str2[sendSize * 5]) = x6;
+    *((float*)&send_str2[sendSize * 6]) = x7;
+    *((float*)&send_str2[sendSize * 7]) = x8;
+    *((float*)&send_str2[sendSize * 8]) = x9;
+
+    *((uint32_t*)&send_str2[sizeof(float) * 9]) = 0x7F800000; // 00 00 80 7F
+}
+
+void UART_TX()
+{
+    // 板间通讯
+    auto &uart7 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart7);
+    const float deg_to_rad = 0.017453292519943295f;
+
+    /* 关节顺序统一为左前、右前、左后、右后。 */
+    Cboard.board_tx_.leg_position[0] = LeftDmMotors.getAngleRadZeroed(2);
+    Cboard.board_tx_.leg_position[1] = RightDmMotors.getAngleRadZeroed(1);
+    Cboard.board_tx_.leg_position[2] = LeftDmMotors.getAngleRadZeroed(1);
+    Cboard.board_tx_.leg_position[3] = RightDmMotors.getAngleRadZeroed(2);
+
+    Cboard.board_tx_.leg_velocity[0] = LeftDmMotors.getVelocityRads(2);
+    Cboard.board_tx_.leg_velocity[1] = RightDmMotors.getVelocityRads(1);
+    Cboard.board_tx_.leg_velocity[2] = LeftDmMotors.getVelocityRads(1);
+    Cboard.board_tx_.leg_velocity[3] = RightDmMotors.getVelocityRads(2);
+
+    Cboard.board_tx_.wheel_velocity[0] = Motor3508.getVelocityRads(1);
+    Cboard.board_tx_.wheel_velocity[1] = Motor3508.getVelocityRads(2);
+
+    for (int i = 0; i < 3; ++i)
+    {
+        Cboard.board_tx_.imu_gyro[i] = HI12.GetGyro(i) * deg_to_rad;
+    }
+
+    /* HI12提供wxyz，协议定义为xyzw。 */
+    Cboard.board_tx_.imu_quaternion[0] = HI12.GetQuaternion(1);
+    Cboard.board_tx_.imu_quaternion[1] = HI12.GetQuaternion(2);
+    Cboard.board_tx_.imu_quaternion[2] = HI12.GetQuaternion(3);
+    Cboard.board_tx_.imu_quaternion[3] = HI12.GetQuaternion(0);
+
+    Cboard.prepareTXFrame();
+    memcpy(BoardTx_buffer, &Cboard.board_tx_, sizeof(Cboard.board_tx_));
+    HAL::UART::Data uart7_tx_buffer{BoardTx_buffer, sizeof(BoardTx_buffer)};
+    uart7.transmit_dma(uart7_tx_buffer);
+}
+
+/* 只从 DT7 更新摇杆、拨轮和左右拨杆，不读取遥控器键盘按键。 */
+void UpdateMomentaryInput(OperatorInput &input)
+{
+    DT7.SetDeadzone(20.0f);
+
+    input.left_switch = DT7.get_s1();
+    input.right_switch = DT7.get_s2();
+
+    /* 左摇杆上下控制前后，右摇杆左右控制yaw，滚轮用于高度增量。 */
+    input.move_x = DT7.get_left_x();
+    input.move_y = DT7.get_left_y();
+    input.rotate = DT7.get_right_x();
+    input.height_increment = DT7.get_scroll_();
+}
+
+
+extern "C" {
+void UartTask(void const * argument)
+{
+    BoardCommunicationInit();
+    for(;;)
+    {
+        UpdateMomentaryInput(operator_input);
+        UART_TX();
+        osDelay(5);
+    }
+}
+
+}
