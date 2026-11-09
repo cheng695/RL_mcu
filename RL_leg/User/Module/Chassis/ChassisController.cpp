@@ -181,7 +181,16 @@ void InitChassisControl()
     chassis_controller.Init();
 }
 
+
+ float wheel_velocity[2];
+ float joint_angle[4];
 void ChassisControlLoop(const OperatorInput& input)
 {
+    wheel_velocity[0] = Motor3508.getVelocityRads(1);
+    wheel_velocity[1] = Motor3508.getVelocityRads(2);
+    joint_angle[0] = LeftDmMotors.getAngleRadZeroed(2);
+    joint_angle[1] = RightDmMotors.getAngleRadZeroed(1);
+    joint_angle[2] = LeftDmMotors.getAngleRadZeroed(1);
+    joint_angle[3] = RightDmMotors.getAngleRadZeroed(2);
     chassis_controller.Update(input);
 }

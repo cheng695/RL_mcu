@@ -12,11 +12,23 @@ if(NOT ARM_TOOLCHAIN_BIN)
     endif()
     get_filename_component(ARM_TOOLCHAIN_BIN "${ARM_GCC}" DIRECTORY)
 endif()
-set(CMAKE_C_COMPILER "${ARM_TOOLCHAIN_BIN}/arm-none-eabi-gcc")
-set(CMAKE_CXX_COMPILER "${ARM_TOOLCHAIN_BIN}/arm-none-eabi-g++")
+
+# Resolve each executable instead of reconstructing extensionless paths.
+# On Windows, CMake needs the actual .exe path for cross compilers.
+find_program(ARM_GCC arm-none-eabi-gcc
+    HINTS "${ARM_TOOLCHAIN_BIN}" REQUIRED)
+find_program(ARM_GXX arm-none-eabi-g++
+    HINTS "${ARM_TOOLCHAIN_BIN}" REQUIRED)
+find_program(ARM_OBJCOPY arm-none-eabi-objcopy
+    HINTS "${ARM_TOOLCHAIN_BIN}" REQUIRED)
+find_program(ARM_SIZE arm-none-eabi-size
+    HINTS "${ARM_TOOLCHAIN_BIN}" REQUIRED)
+
+set(CMAKE_C_COMPILER "${ARM_GCC}")
+set(CMAKE_CXX_COMPILER "${ARM_GXX}")
 set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}")
-set(CMAKE_OBJCOPY "${ARM_TOOLCHAIN_BIN}/arm-none-eabi-objcopy" CACHE FILEPATH "objcopy")
-set(CMAKE_SIZE "${ARM_TOOLCHAIN_BIN}/arm-none-eabi-size" CACHE FILEPATH "size")
+set(CMAKE_OBJCOPY "${ARM_OBJCOPY}" CACHE FILEPATH "objcopy")
+set(CMAKE_SIZE "${ARM_SIZE}" CACHE FILEPATH "size")
 
 set(MCU_FLAGS "-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard")
 set(CMAKE_C_FLAGS_INIT "${MCU_FLAGS} -Wall -fdata-sections -ffunction-sections -fstack-usage")

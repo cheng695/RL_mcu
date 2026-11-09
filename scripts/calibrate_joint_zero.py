@@ -5,15 +5,12 @@ import argparse
 import math
 import os
 import re
-import select
 import statistics
 import struct
 import sys
-import termios
 import time
 from pathlib import Path
 from typing import Optional
-import tty
 
 
 FRAME_SIZE = 94
@@ -66,16 +63,57 @@ class FeedbackParser:
         return frames
 
 
+class VofaJustFloatParser:
+    """Parse this firmware's 9-float VOFA JustFloat frames (36 data + 4 tail bytes)."""
+
+    FRAME_SIZE = 40
+
+    def __init__(self):
+        self.buffer = bytearray()
+
+    def feed(self, data: bytes):
+        self.buffer.extend(data)
+        frames = []
+        tail_offset = self.FRAME_SIZE - 4
+        tail = b"\x00\x00\x80\x7f"
+
+        while len(self.buffer) >= self.FRAME_SIZE:
+            if self.buffer[tail_offset:self.FRAME_SIZE] == tail:
+                candidate = bytes(self.buffer[:self.FRAME_SIZE])
+                values = struct.unpack_from("<9f", candidate)
+                if all(math.isfinite(value) for value in values):
+                    frames.append(candidate)
+                del self.buffer[:self.FRAME_SIZE]
+            else:
+                # Re-align after startup noise or a dropped byte.
+                del self.buffer[0]
+
+        return frames
+
+
 class PosixSerial:
-    """Minimal 8N1 serial reader using only Python's standard library."""
+    """Read serial data on POSIX directly, or on Windows through pyserial."""
 
     def __init__(self, device: str, baud: int, timeout: float = 0.2):
         self.device = device
         self.baud = baud
         self.timeout = timeout
         self.fd: Optional[int] = None
+        self.serial_port = None
 
     def __enter__(self):
+        if os.name == "nt":
+            try:
+                import serial
+            except ImportError as error:
+                raise RuntimeError("Windows serial support requires pyserial: py -m pip install pyserial") from error
+            self.serial_port = serial.Serial(self.device, self.baud, timeout=self.timeout)
+            return self
+
+        import select
+        import termios
+        import tty
+
         speed = getattr(termios, f"B{self.baud}", None)
         if speed is None:
             raise ValueError(f"Unsupported baud rate: {self.baud}")
@@ -96,14 +134,20 @@ class PosixSerial:
         return self
 
     def read(self, size: int) -> bytes:
+        if self.serial_port is not None:
+            return self.serial_port.read(size)
         if self.fd is None:
             return b""
+        import select
         readable, _, _ = select.select([self.fd], [], [], self.timeout)
         if not readable:
             return b""
         return os.read(self.fd, size)
 
     def __exit__(self, exc_type, exc_value, traceback):
+        if self.serial_port is not None:
+            self.serial_port.close()
+            self.serial_port = None
         if self.fd is not None:
             os.close(self.fd)
             self.fd = None
@@ -144,16 +188,21 @@ def main():
     default_header = repo_root / "RL_leg/User/Module/Chassis/JointCalibration.hpp"
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--port", required=True, help="UART7 USB serial device, e.g. /dev/ttyUSB0")
-    parser.add_argument("--baud", type=int, default=460800)
+    parser.add_argument("--port", required=True, help="serial device, e.g. COM3 on Windows or /dev/ttyUSB0 on Linux")
+    parser.add_argument("--protocol", choices=("vofa", "board"), default="board",
+                        help="board reads UART7 BoardTX (current firmware default); vofa reads USART3 JustFloat")
+    parser.add_argument("--baud", type=int, default=115200,
+                        help="serial baud rate (current firmware default: 115200)")
     parser.add_argument("--samples", type=int, default=200)
+    parser.add_argument("--timeout", type=float, default=30.0,
+                        help="maximum seconds to wait for all samples (default: 30)")
     parser.add_argument("--max-std", type=float, default=0.02,
                         help="maximum standard deviation in rad (default: 0.02)")
     parser.add_argument("--header", type=Path, default=default_header)
     args = parser.parse_args()
 
-    if args.samples < 2 or args.max_std <= 0:
-        parser.error("--samples must be >= 2 and --max-std must be positive")
+    if args.samples < 2 or args.max_std <= 0 or args.timeout <= 0:
+        parser.error("--samples must be >= 2; --max-std and --timeout must be positive")
 
     try:
         existing_offsets = load_existing_offsets(args.header)
@@ -165,17 +214,18 @@ def main():
     print("运行中的固件应使用当前 JointCalibration.hpp 中的偏置。")
     input("准备好了按回车读取")
 
-    parser_state = FeedbackParser()
+    parser_state = VofaJustFloatParser() if args.protocol == "vofa" else FeedbackParser()
     samples = []
     started = time.monotonic()
 
     try:
         with PosixSerial(args.port, args.baud, timeout=0.2) as port:
-            while len(samples) < args.samples:
+            while len(samples) < args.samples and time.monotonic() - started < args.timeout:
                 frames = parser_state.feed(port.read(256))
                 for frame in frames:
-                    # TX protocol leg_position begins at byte offset 4; values are float32 LE.
-                    corrected = struct.unpack_from("<4f", frame, 4)
+                    # VOFA starts at channel 0; BoardTX leg_position begins at byte 4.
+                    position_offset = 0 if args.protocol == "vofa" else 4
+                    corrected = struct.unpack_from("<4f", frame, position_offset)
                     raw_positions = tuple(
                         corrected[i] + existing_offsets[name]
                         for i, name in enumerate(JOINT_NAMES)
@@ -185,12 +235,16 @@ def main():
                         print(f"\rValid frames: {len(samples)}/{args.samples}", end="", flush=True)
                         if len(samples) >= args.samples:
                             break
-    except (OSError, ValueError) as error:
+    except (OSError, RuntimeError, ValueError) as error:
         print(f"\nSerial error: {error}", file=sys.stderr)
         return 1
 
     elapsed = time.monotonic() - started
     print(f"\nCollected {len(samples)} frames in {elapsed:.1f}s.")
+    if len(samples) < args.samples:
+        print(f"Timed out before collecting all {args.samples} frames; calibration header was not changed.",
+              file=sys.stderr)
+        return 1
 
     offsets = {}
     for index, name in enumerate(JOINT_NAMES):

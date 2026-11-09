@@ -6,6 +6,7 @@
 /*
  * 兼容旧接口：初始化底盘控制模块。
  */
+
 void fsm_init()
 {
     InitChassisControl();
@@ -25,4 +26,11 @@ void Control(void const *argument)
         osDelay(1);
     }
 }
+
+/* Compatibility entry point used by the CubeMX-generated FreeRTOS setup. */
+void AlgTask(void const *argument)
+{
+    Control(argument);
+}
+
 }

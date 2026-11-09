@@ -6,7 +6,7 @@
 /* 通讯数据缓存 ---------------------------------------------------------------------------------------------*/
 uint8_t BoardRx_buffer[BoardCommunication::RX_FRAME_SIZE];
 uint8_t BoardTx_buffer[BoardCommunication::TX_FRAME_SIZE];
-uint8_t send_str2[sizeof(float) * 11];  
+uint8_t send_str2[sizeof(float) * 10];
 
 uint8_t DT7Rx_buffer[18];                  
 uint8_t HI12Rx_buffer[82];
@@ -61,20 +61,14 @@ void BoardCommunicationInit()
  */
 void vofa_send(float x1, float x2, float x3, float x4, float x5, float x6, float x7, float x8, float x9)
 {
-    const uint8_t sendSize = sizeof(float); 
+    const float channels[9] = {x1, x2, x3, x4, x5, x6, x7, x8, x9};
+    const uint8_t sendSize = sizeof(float); // 单浮点数�?字节
 
-    // 浮点数据写入缓冲区（小端模式）
-    *((float*)&send_str2[sendSize * 0]) = x1;
-    *((float*)&send_str2[sendSize * 1]) = x2;
-    *((float*)&send_str2[sendSize * 2]) = x3;
-    *((float*)&send_str2[sendSize * 3]) = x4;
-    *((float*)&send_str2[sendSize * 4]) = x5;
-    *((float*)&send_str2[sendSize * 5]) = x6;
-    *((float*)&send_str2[sendSize * 6]) = x7;
-    *((float*)&send_str2[sendSize * 7]) = x8;
-    *((float*)&send_str2[sendSize * 8]) = x9;
+    // �?个浮点数据写入缓冲区（小端模式）
+    memcpy(send_str2, channels, sendSize * 9);
 
-    *((uint32_t*)&send_str2[sizeof(float) * 9]) = 0x7F800000; // 00 00 80 7F
+    // 写入帧尾（协议要�?0x00 0x00 0x80 0x7F�?
+    *((uint32_t*)&send_str2[sizeof(float) * 9]) = 0x7F800000; // 小端存储�?00 00 80 7F
 }
 
 void UART_TX()
@@ -111,7 +105,7 @@ void UART_TX()
     Cboard.prepareTXFrame();
     memcpy(BoardTx_buffer, &Cboard.board_tx_, sizeof(Cboard.board_tx_));
     HAL::UART::Data uart7_tx_buffer{BoardTx_buffer, sizeof(BoardTx_buffer)};
-    uart7.transmit_dma(uart7_tx_buffer);
+    uart7.transmit(uart7_tx_buffer);
 }
 
 /* 只从 DT7 更新摇杆、拨轮和左右拨杆，不读取遥控器键盘按键。 */

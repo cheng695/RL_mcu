@@ -58,7 +58,7 @@ osThreadId UARTHandle;
 /* USER CODE END FunctionPrototypes */
 
 void StartDefaultTask(void const * argument);
-extern void Control(void const * argument);
+extern void AlgTask(void const * argument);
 extern void CanTask(void const * argument);
 extern void UartTask(void const * argument);
 
@@ -111,8 +111,8 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
   defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-  /* definition and creation of control task */
-  osThreadDef(ALG, Control, osPriorityIdle, 0, 512);
+  /* definition and creation of ALG */
+  osThreadDef(ALG, AlgTask, osPriorityIdle, 0, 512);
   ALGHandle = osThreadCreate(osThread(ALG), NULL);
 
   /* definition and creation of CAN */

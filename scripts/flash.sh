@@ -17,6 +17,11 @@ for arg in "$@"; do
     esac
 done
 elf="$root/RL_leg/build/$preset/RL_leg.elf"
+commander_elf=$elf
+if command -v cygpath >/dev/null 2>&1; then
+    # J-Link for Windows cannot open MSYS paths such as /d/project/file.elf.
+    commander_elf=$(cygpath -am "$elf")
+fi
 jlink=${JLINK_EXE:-JLinkExe}
 if [[ -z ${JLINK_EXE:-} ]] && ! command -v "$jlink" >/dev/null 2>&1; then
     jlink=/opt/SEGGER/JLink/JLinkExe
@@ -30,7 +35,7 @@ if "$dry_run"; then
     echo "Firmware: $elf"
     printf 'Command: '
     printf '%q ' "$jlink" "${args[@]}"
-    printf '\nJ-Link commands:\nr\nh\nloadfile "%s"\nr\ng\nq\n' "$elf"
+    printf '\nJ-Link commands:\nr\nh\nloadfile "%s"\nr\ng\nq\n' "$commander_elf"
     exit 0
 fi
 if "$build"; then
@@ -40,5 +45,5 @@ fi
 command -v "$jlink" >/dev/null 2>&1 || { echo "JLinkExe not found; set JLINK_EXE." >&2; exit 1; }
 commands=$(mktemp /tmp/rl-leg-jlink.XXXXXX)
 trap 'rm -f -- "$commands"' EXIT
-printf 'r\nh\nloadfile "%s"\nr\ng\nq\n' "$elf" > "$commands"
+printf 'r\nh\nloadfile "%s"\nr\ng\nq\n' "$commander_elf" > "$commands"
 "$jlink" "${args[@]}" -CommanderScript "$commands"
