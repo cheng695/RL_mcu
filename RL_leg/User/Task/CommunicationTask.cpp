@@ -105,7 +105,7 @@ void UART_TX()
     Cboard.prepareTXFrame();
     memcpy(BoardTx_buffer, &Cboard.board_tx_, sizeof(Cboard.board_tx_));
     HAL::UART::Data uart7_tx_buffer{BoardTx_buffer, sizeof(BoardTx_buffer)};
-    uart7.transmit(uart7_tx_buffer);
+    uart7.transmit_dma(uart7_tx_buffer);
 }
 
 /* 只从 DT7 更新摇杆、拨轮和左右拨杆，不读取遥控器键盘按键。 */
@@ -132,7 +132,7 @@ void UartTask(void const * argument)
     {
         UpdateMomentaryInput(operator_input);
         UART_TX();
-        osDelay(5);
+        osDelay(1);
     }
 }
 
