@@ -4,6 +4,8 @@
 #pragma once
 #include "MotorBase.hpp"
 #include "can_hal.hpp"
+#include <algorithm>
+#include <cmath>
 
 namespace BSP::Motor::DM
 {
@@ -74,6 +76,15 @@ namespace BSP::Motor::DM
         }
 
     private:
+        static float wrapToPi(float angle)
+        {
+            constexpr float pi = 3.14159265358979323846f;
+            constexpr float two_pi = 6.28318530717958647692f;
+            while (angle > pi) angle -= two_pi;
+            while (angle < -pi) angle += two_pi;
+            return angle;
+        }
+
         float uint_to_float(int x_int, float x_min, float x_max, int bits)
         {
             float span = x_max - x_min;
@@ -189,7 +200,9 @@ namespace BSP::Motor::DM
             {
                 return 0.0f;
             }
-            return static_cast<float>(this->unit_data_[id - 1].angle_Rad) - angle_offset_rad_[id - 1];
+            const float zeroed_angle =
+                static_cast<float>(this->unit_data_[id - 1].angle_Rad) - angle_offset_rad_[id - 1];
+            return wrapToPi(zeroed_angle);
         }
 
         float getAngleOffset(uint8_t id) const
@@ -244,7 +257,22 @@ namespace BSP::Motor::DM
             {
                 return;
             }
-            ctrl_Mit(id, _pos + angle_offset_rad_[id - 1], _vel, _KP, _KD, _torq);
+
+            constexpr float two_pi = 6.28318530717958647692f;
+            const float raw_target = _pos + angle_offset_rad_[id - 1];
+            const float current_raw = static_cast<float>(this->unit_data_[id - 1].angle_Rad);
+            const float min_turns = std::ceil((params_.P_MIN - raw_target) / two_pi);
+            const float max_turns = std::floor((params_.P_MAX - raw_target) / two_pi);
+            if (!std::isfinite(raw_target) || !std::isfinite(current_raw) || min_turns > max_turns)
+            {
+                return;
+            }
+
+            /* 选择协议范围内、离当前编码器角最近的等效整圈目标，
+               避免编码器多圈参考偏移后目标突然相差约2π。 */
+            const float nearest_turns = std::round((current_raw - raw_target) / two_pi);
+            const float turns = std::clamp(nearest_turns, min_turns, max_turns);
+            ctrl_Mit(id, raw_target + turns * two_pi, _vel, _KP, _KD, _torq);
         }
 
 

@@ -76,7 +76,7 @@ void vofa_send(float x1, float x2, float x3, float x4, float x5, float x6, float
 void UART_TX()
 {
     // 板间通讯
-    auto &uart7 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart7);
+    auto &uart8 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart8);
     const float deg_to_rad = 0.017453292519943295f;
 
     /* 关节顺序统一为左前、右前、左后、右后。 */
@@ -121,8 +121,8 @@ void UART_TX()
 
     Cboard.prepareTXFrame();
     memcpy(BoardTx_buffer, &Cboard.board_tx_, sizeof(Cboard.board_tx_));
-    HAL::UART::Data uart7_tx_buffer{BoardTx_buffer, sizeof(BoardTx_buffer)};
-    uart7.transmit_dma(uart7_tx_buffer);
+    HAL::UART::Data uart8_tx_buffer{BoardTx_buffer, sizeof(BoardTx_buffer)};
+    uart8.transmit_dma(uart8_tx_buffer);
 }
 
 /* 只从 DT7 更新摇杆、拨轮和左右拨杆，不读取遥控器键盘按键。 */

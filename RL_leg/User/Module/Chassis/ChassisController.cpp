@@ -29,6 +29,16 @@ ALG::PID::PID wheel_pid[2] = {
 
 bool IsValidCommand(const BoardCommunication::BoardRX& command)
 {
+    constexpr float URDF_JOINT_LIMIT_RAD = 3.14159265358979323846f;
+    for (float target : command.leg_position_target)
+    {
+        if (!std::isfinite(target) || target < -URDF_JOINT_LIMIT_RAD ||
+            target > URDF_JOINT_LIMIT_RAD)
+        {
+            return false;
+        }
+    }
+
     const float raw_joint_targets[4] = {
         command.leg_position_target[0] + RightDmMotors.getAngleOffset(1),
         -command.leg_position_target[1] + LeftDmMotors.getAngleOffset(2),
@@ -200,12 +210,16 @@ void ChassisController::Update(const OperatorInput& input)
 
     dm_motor_enable_request = true;
     dm_motor_strategy_request = true;
-    for (uint8_t i = 0; i < 2; ++i)
-    {
-        const float output = wheel_pid[i].UpDate(command.wheel_velocity_target[i],
-                                                  Motor3508.getVelocityRads(i + 1));
-        chassis_output.out_wheel[i] = std::clamp(output, -16384.0f, 16384.0f);
-    }
+    /* 与上行轮速坐标一致：左轮=-Motor3508(1)，右轮=Motor3508(2)。
+       PID在RL坐标中计算，左轮电流下发前需转换回电机原始方向。 */
+    const float left_wheel_feedback = -Motor3508.getVelocityRads(1);
+    const float right_wheel_feedback = Motor3508.getVelocityRads(2);
+    const float left_wheel_output = wheel_pid[0].UpDate(
+        command.wheel_velocity_target[0], left_wheel_feedback);
+    const float right_wheel_output = wheel_pid[1].UpDate(
+        command.wheel_velocity_target[1], right_wheel_feedback);
+    chassis_output.out_wheel[0] = std::clamp(-left_wheel_output, -16384.0f, 16384.0f);
+    chassis_output.out_wheel[1] = std::clamp(right_wheel_output, -16384.0f, 16384.0f);
     chassis_output.out_wheel[2] = 0.0f;
     chassis_output.out_wheel[3] = 0.0f;
 }
