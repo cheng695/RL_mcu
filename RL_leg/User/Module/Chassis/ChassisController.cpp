@@ -30,10 +30,10 @@ ALG::PID::PID wheel_pid[2] = {
 bool IsValidCommand(const BoardCommunication::BoardRX& command)
 {
     const float raw_joint_targets[4] = {
-        command.leg_position_target[0] + LeftDmMotors.getAngleOffset(2),
-        command.leg_position_target[1] + RightDmMotors.getAngleOffset(1),
-        command.leg_position_target[2] + LeftDmMotors.getAngleOffset(1),
-        command.leg_position_target[3] + RightDmMotors.getAngleOffset(2)};
+        command.leg_position_target[0] + RightDmMotors.getAngleOffset(1),
+        -command.leg_position_target[1] + LeftDmMotors.getAngleOffset(2),
+        command.leg_position_target[2] + RightDmMotors.getAngleOffset(2),
+        -command.leg_position_target[3] + LeftDmMotors.getAngleOffset(1)};
 
     for (float target : raw_joint_targets)
     {
@@ -55,6 +55,7 @@ bool IsValidCommand(const BoardCommunication::BoardRX& command)
 void StopControllerOutput()
 {
     dm_motor_enable_request = false;
+    dm_motor_strategy_request = false;
     for (float& output : chassis_output.out_wheel)
     {
         output = 0.0f;
@@ -137,15 +138,28 @@ void ChassisController::Update(const OperatorInput& input)
     chassis_fsm.Dispatch(event);
     chassis_fsm.TIM_Update();
 
-    const bool control_state = chassis_fsm.Get_Now_State() == CONTROL;
-    if (control_state)
+    const Enum_Chassis_States state = chassis_fsm.Get_Now_State();
+    const bool control_state = state == CONTROL;
+    const bool motor_enable_state = state == MOTOR_ENABLE;
+    const bool command_active = control_state || motor_enable_state;
+    if (command_active)
     {
         height_target_m_ += input.height_increment * HEIGHT_CHANGE_RATE * dt;
         height_target_m_ = std::clamp(height_target_m_, HEIGHT_MIN, HEIGHT_MAX);
+    }
 
+    if (control_state)
+    {
         Cboard.board_tx_.remote_command.status = 1;
         Cboard.board_tx_.remote_command.vx = input.move_y * REMOTE_MAX_VX;
         /* 右摇杆向左为正yaw，按常用Z轴逆时针为正的约定取反。 */
+        Cboard.board_tx_.remote_command.yaw_rate = -input.rotate * REMOTE_MAX_YAW_RATE;
+    }
+    else if (motor_enable_state)
+    {
+        /* 仅使能时向上位机发送遥控cmd，不更新策略高度或执行策略。 */
+        Cboard.board_tx_.remote_command.status = 1;
+        Cboard.board_tx_.remote_command.vx = input.move_y * REMOTE_MAX_VX;
         Cboard.board_tx_.remote_command.yaw_rate = -input.rotate * REMOTE_MAX_YAW_RATE;
     }
     else
@@ -157,8 +171,28 @@ void ChassisController::Update(const OperatorInput& input)
     Cboard.board_tx_.remote_command.height = height_target_m_;
     Cboard.board_tx_.status_flags = control_state ? 0x01 : 0x00;
 
+    if (!command_active)
+    {
+        StopControllerOutput();
+        return;
+    }
+
+    /* 仅使能状态只开关节电机并上报cmd，底盘轮输出保持为零。 */
+    dm_motor_enable_request = true;
+    dm_motor_strategy_request = false;
+    if (!control_state)
+    {
+        for (float& output : chassis_output.out_wheel)
+        {
+            output = 0.0f;
+        }
+        wheel_pid[0].reset();
+        wheel_pid[1].reset();
+        return;
+    }
+
     const BoardCommunication::BoardRX& command = Cboard.board_rx_;
-    if (!control_state || !Cboard.isConnected() || command.control_enable != 1 ||
+    if (!Cboard.isConnected() || command.control_enable != 1 ||
         !joint_gains_configured_ || !IsValidCommand(command))
     {
         StopControllerOutput();
@@ -166,6 +200,7 @@ void ChassisController::Update(const OperatorInput& input)
     }
 
     dm_motor_enable_request = true;
+    dm_motor_strategy_request = true;
     for (uint8_t i = 0; i < 2; ++i)
     {
         const float output = wheel_pid[i].UpDate(command.wheel_velocity_target[i],
@@ -189,10 +224,10 @@ void ChassisControlLoop(const OperatorInput& input)
 {
     wheel_velocity[0] = Motor3508.getVelocityRads(1);
     wheel_velocity[1] = Motor3508.getVelocityRads(2);
-    joint_angle[0] = LeftDmMotors.getAngleRadZeroed(2);
-    joint_angle[1] = RightDmMotors.getAngleRadZeroed(1);
-    joint_angle[2] = LeftDmMotors.getAngleRadZeroed(1);
-    joint_angle[3] = RightDmMotors.getAngleRadZeroed(2);
+    joint_angle[0] = LeftDmMotors.getAngleRad(2);
+    joint_angle[1] = RightDmMotors.getAngleRad(1);
+    joint_angle[2] = LeftDmMotors.getAngleRad(1);
+    joint_angle[3] = RightDmMotors.getAngleRad(2);
     imu[0] = HI12.GetAngle(0);
     imu[1] = HI12.GetAngle(1);
     imu[2] = HI12.GetAngle(2);

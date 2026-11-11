@@ -8,6 +8,7 @@ enum Enum_Chassis_States
 {
     STOP = 0,
     EMERGENCY_STOP,
+    MOTOR_ENABLE,
     CONTROL,
     STATUS_COUNT
 };
@@ -17,6 +18,7 @@ enum class ChassisEvent
     None = 0,
     StopRequested,
     EmergencyStopRequested,
+    MotorEnableRequested,
     ControlRequested,
 };
 

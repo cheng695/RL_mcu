@@ -39,7 +39,7 @@ static void motor_control_logic(uint32_t tick)
 }
 
 /* 每轮在两个关节间轮换；两条 CAN 总线各发送一台关节。 */
-static void dm_motor_control_logic(uint8_t motor_id)
+static void dm_motor_control_logic()
 {
     auto control_motor = [](auto& motors, uint8_t id, uint8_t command_index)
     {
@@ -50,29 +50,37 @@ static void dm_motor_control_logic(uint8_t motor_id)
         }
 
         const uint8_t error_code = motors.getErrorCode(id);
-        if (error_code == 0x00)
-        {
-            motors.On(id, BSP::Motor::DM::Model::MIT);
-        }
-        else if (error_code == 0x0D)
+        if (error_code == 0x0D)
         {
             motors.ClearErr(id, BSP::Motor::DM::Model::MIT);
         }
-        else
+        else if (dm_motor_strategy_request)
         {
             const auto& command = Cboard.board_rx_;
+            /* 上行时右腿关节用了负号映射到RL坐标；下发期望角时做逆变换。 */
+            const float position_target = (command_index == 1 || command_index == 3)
+                ? -command.leg_position_target[command_index]
+                : command.leg_position_target[command_index];
             motors.ctrl_MitZeroed(id,
-                                  command.leg_position_target[command_index],
+                                  position_target,
                                   0.0f,
                                   chassis_controller.GetJointKp(command_index),
                                   chassis_controller.GetJointKd(command_index),
                                   0.0f);
         }
+        else
+        {
+            motors.On(id, BSP::Motor::DM::Model::MIT);
+        }
     };
 
-    /* 协议顺序：左前、右前、左后、右后。 */
-    control_motor(RightDmMotors, motor_id, motor_id == 1 ? 1 : 3);
-    control_motor(LeftDmMotors, motor_id, motor_id == 1 ? 2 : 0);
+    /* 按 JointCalibration.hpp 中确认的实际位置映射：
+       RightDm(1)=左前、RightDm(2)=左后、LeftDm(2)=右前、LeftDm(1)=右后。
+       每轮都更新四台电机，避免轮换周期导致单台命令刷新率减半。 */
+    control_motor(RightDmMotors, 1, 0);
+    control_motor(RightDmMotors, 2, 2);
+    control_motor(LeftDmMotors, 2, 1);
+    control_motor(LeftDmMotors, 1, 3);
 }
 
 extern "C" {
@@ -83,13 +91,11 @@ void CanTask(void const* argument)
     MotorInit();
 
     static uint32_t loop_count = 0;
-    static uint8_t dm_motor_id = 1;
     for (;;)
     {
         loop_count++;
         motor_control_logic(loop_count);
-        dm_motor_control_logic(dm_motor_id);
-        dm_motor_id = (dm_motor_id == 1) ? 2 : 1;
+        dm_motor_control_logic();
 
         osDelay(1);
     }

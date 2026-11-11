@@ -5,6 +5,7 @@ namespace
 const char* State_Names[STATUS_COUNT] = {
     "STOP",
     "EMERGENCY_STOP",
+    "MOTOR_ENABLE",
     "CONTROL",
 };
 } /* namespace */
@@ -64,6 +65,10 @@ void Chassis_FSM::Dispatch(ChassisEvent event)
 
         case ChassisEvent::EmergencyStopRequested:
             TransitTo(EMERGENCY_STOP);
+            break;
+
+        case ChassisEvent::MotorEnableRequested:
+            TransitTo(MOTOR_ENABLE);
             break;
 
         case ChassisEvent::ControlRequested:

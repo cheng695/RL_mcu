@@ -1,5 +1,6 @@
 #include "CommunicationTask.hpp"
 #include "RobotContext.hpp"
+#include "VmcVelocityEstimator.hpp"
 #include "uart_device.hpp"
 #include <cstdint>
 
@@ -78,29 +79,40 @@ void UART_TX()
     const float deg_to_rad = 0.017453292519943295f;
 
     /* 关节顺序统一为左前、右前、左后、右后。 */
-    Cboard.board_tx_.leg_position[0] = LeftDmMotors.getAngleRadZeroed(2);
-    Cboard.board_tx_.leg_position[1] = RightDmMotors.getAngleRadZeroed(1);
-    Cboard.board_tx_.leg_position[2] = LeftDmMotors.getAngleRadZeroed(1);
-    Cboard.board_tx_.leg_position[3] = RightDmMotors.getAngleRadZeroed(2);
+    Cboard.board_tx_.leg_position[0] = RightDmMotors.getAngleRadZeroed(1); //左
+    Cboard.board_tx_.leg_position[1] = -LeftDmMotors.getAngleRadZeroed(2);
+    Cboard.board_tx_.leg_position[2] = RightDmMotors.getAngleRadZeroed(2);  //左
+    Cboard.board_tx_.leg_position[3] = -LeftDmMotors.getAngleRadZeroed(1);
 
-    Cboard.board_tx_.leg_velocity[0] = LeftDmMotors.getVelocityRads(2);
-    Cboard.board_tx_.leg_velocity[1] = RightDmMotors.getVelocityRads(1);
-    Cboard.board_tx_.leg_velocity[2] = LeftDmMotors.getVelocityRads(1);
-    Cboard.board_tx_.leg_velocity[3] = RightDmMotors.getVelocityRads(2);
+    Cboard.board_tx_.leg_velocity[0] = RightDmMotors.getVelocityRads(2);  //左
+    Cboard.board_tx_.leg_velocity[1] = -LeftDmMotors.getVelocityRads(2);
+    Cboard.board_tx_.leg_velocity[2] = RightDmMotors.getVelocityRads(1);  //左
+    Cboard.board_tx_.leg_velocity[3] = -LeftDmMotors.getVelocityRads(1);
 
-    Cboard.board_tx_.wheel_velocity[0] = Motor3508.getVelocityRads(1);
+    Cboard.board_tx_.wheel_velocity[0] = -Motor3508.getVelocityRads(1);
     Cboard.board_tx_.wheel_velocity[1] = Motor3508.getVelocityRads(2);
 
-    for (int i = 0; i < 3; ++i)
-    {
-        Cboard.board_tx_.imu_gyro[i] = HI12.GetGyro(i) * deg_to_rad;
-    }
+    Cboard.board_tx_.imu_gyro[0] = HI12.GetGyro(1) * deg_to_rad;
+    Cboard.board_tx_.imu_gyro[1] = HI12.GetGyro(0) * deg_to_rad;
+    Cboard.board_tx_.imu_gyro[2] = HI12.GetGyro(2) * deg_to_rad;
 
-    /* HI12提供wxyz，协议定义为xyzw。 */
-    Cboard.board_tx_.imu_quaternion[0] = HI12.GetQuaternion(1);
-    Cboard.board_tx_.imu_quaternion[1] = HI12.GetQuaternion(2);
+    /* HI12提供wxyz；按当前安装与上位机坐标约定交换x/y，z轴和w保持不变。 */
+    Cboard.board_tx_.imu_quaternion[0] = HI12.GetQuaternion(2);
+    Cboard.board_tx_.imu_quaternion[1] = HI12.GetQuaternion(1);
     Cboard.board_tx_.imu_quaternion[2] = HI12.GetQuaternion(3);
     Cboard.board_tx_.imu_quaternion[3] = HI12.GetQuaternion(0);
+
+    /* vx估计使用参考VMC项目的原始编码器零点、方向和机构正运动学。
+       ID映射：左后/左前=CAN2 ID5/7，右前/右后=CAN1 ID1/3；
+       左右轮=CAN1 ID2/1。这里刻意使用getAngleRad()原始角度，不使用
+       当前项目JointCalibration的零偏，也不使用上行遥测的方向变换。 */
+    Cboard.board_tx_.base_forward_velocity = VmcVelocityEstimator::Estimate(
+        LeftDmMotors.getAngleRad(1), LeftDmMotors.getAngleRad(2),
+        RightDmMotors.getAngleRad(1), RightDmMotors.getAngleRad(2),
+        LeftDmMotors.getVelocityRads(1), LeftDmMotors.getVelocityRads(2),
+        RightDmMotors.getVelocityRads(1), RightDmMotors.getVelocityRads(2),
+        Motor3508.getVelocityRads(2), Motor3508.getVelocityRads(1),
+        HI12.GetAngle(1) * deg_to_rad, HI12.GetGyro(0) * deg_to_rad);
 
     Cboard.prepareTXFrame();
     memcpy(BoardTx_buffer, &Cboard.board_tx_, sizeof(Cboard.board_tx_));
@@ -132,7 +144,7 @@ void UartTask(void const * argument)
     {
         UpdateMomentaryInput(operator_input);
         UART_TX();
-        osDelay(1);
+        osDelay(10);
     }
 }
 

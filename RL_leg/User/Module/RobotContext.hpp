@@ -21,6 +21,7 @@ extern BSP::Motor::Dji::GM3508<2> Motor3508;
 extern BSP::Motor::DM::J8009p<2> RightDmMotors;
 extern BSP::Motor::DM::J8009p<2> LeftDmMotors;
 extern volatile bool dm_motor_enable_request;
+extern volatile bool dm_motor_strategy_request;
 
 extern BoardCommunication Cboard;
 

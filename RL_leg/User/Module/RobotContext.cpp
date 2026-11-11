@@ -18,6 +18,7 @@ BSP::Motor::Dji::GM3508<2> Motor3508(0x200, {1, 2}, 0x200);
 BSP::Motor::DM::J8009p<2> RightDmMotors(0x000, {1, 3}, {0x002, 0x004}, HAL::CAN::CanDeviceId::HAL_Can1);
 BSP::Motor::DM::J8009p<2> LeftDmMotors(0x000, {5, 7}, {0x006, 0x008}, HAL::CAN::CanDeviceId::HAL_Can2);
 volatile bool dm_motor_enable_request = false;
+volatile bool dm_motor_strategy_request = false;
 
 // 板间通讯
 BoardCommunication Cboard;

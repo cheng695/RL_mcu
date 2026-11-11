@@ -22,6 +22,16 @@ ChassisEvent ResolveChassisEvent(const OperatorInput& input, bool equipment_onli
 
     if (input.left_switch == DOWN && input.right_switch == MIDDLE)
     {
+        return ChassisEvent::StopRequested;
+    }
+
+    if (input.left_switch == MIDDLE && input.right_switch == DOWN)
+    {
+        return ChassisEvent::MotorEnableRequested;
+    }
+
+    if (input.left_switch == MIDDLE && input.right_switch == MIDDLE)
+    {
         return ChassisEvent::ControlRequested;
     }
 
