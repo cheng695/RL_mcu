@@ -22,15 +22,15 @@ void BoardCommunicationInit()
 {
     auto &uart1 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart1);
     auto &uart6 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart6);
-    auto &uart7 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart7);
+    auto &uart8 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart8);
 
     HAL::UART::Data uart1_rx_buffer{DT7Rx_buffer, sizeof(DT7Rx_buffer)};
     HAL::UART::Data uart6_rx_buffer{HI12Rx_buffer, sizeof(HI12Rx_buffer)};
-    HAL::UART::Data uart7_rx_buffer{BoardRx_buffer, sizeof(BoardRx_buffer)};
+    HAL::UART::Data uart8_rx_buffer{BoardRx_buffer, sizeof(BoardRx_buffer)};
 
     uart1.receive_dma_idle(uart1_rx_buffer);
     uart6.receive_dma_idle(uart6_rx_buffer);
-    uart7.receive_dma_idle(uart7_rx_buffer);
+    uart8.receive_dma_idle(uart8_rx_buffer);
 
     uart1.register_rx_callback([](const HAL::UART::Data &data)
     {
@@ -48,7 +48,7 @@ void BoardCommunicationInit()
         }
     });
 
-    uart7.register_rx_callback([](const HAL::UART::Data &data)
+    uart8.register_rx_callback([](const HAL::UART::Data &data)
     {
         if (data.buffer != nullptr && data.size > 0)
         {

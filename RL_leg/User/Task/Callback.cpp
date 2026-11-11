@@ -60,17 +60,17 @@ extern "C"
             }
         }
         // 上下板
-        else if(huart->Instance == UART7)
+        else if(huart->Instance == UART8)
         {
-            HAL::UART::Data uart7_rx_buffer{BoardRx_buffer, Size};
-            auto &uart7 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart7);
+            HAL::UART::Data uart8_rx_buffer{BoardRx_buffer, Size};
+            auto &uart8 = HAL::UART::get_uart_bus_instance().get_device(HAL::UART::UartDeviceId::HAL_Uart8);
             
-            if(huart == uart7.get_handle())
+            if(huart == uart8.get_handle())
             {
-                uart7.trigger_rx_callbacks(uart7_rx_buffer);
+                uart8.trigger_rx_callbacks(uart8_rx_buffer);
 
-                HAL::UART::Data uart7_dma_buffer{BoardRx_buffer, sizeof(BoardRx_buffer)};
-                uart7.receive_dma_idle(uart7_dma_buffer);
+                HAL::UART::Data uart8_dma_buffer{BoardRx_buffer, sizeof(BoardRx_buffer)};
+                uart8.receive_dma_idle(uart8_dma_buffer);
             }
         }
     }
