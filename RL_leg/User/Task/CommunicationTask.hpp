@@ -21,6 +21,10 @@ class BoardCommunication
         static constexpr uint8_t FRAME_TAIL[2] = {0xC3, 0xF7};
         static constexpr size_t TX_FRAME_SIZE = 94;
         static constexpr size_t RX_FRAME_SIZE = 33;
+        static constexpr size_t RX_LEG_TARGET_OFFSET = 5;
+        static constexpr size_t RX_WHEEL_TARGET_OFFSET = 21;
+        static constexpr size_t RX_CRC_OFFSET = 29;
+        static constexpr size_t RX_TAIL_OFFSET = 31;
 
         #pragma pack(push, 1)
         // 发送：底盘→上位机
@@ -45,8 +49,10 @@ class BoardCommunication
             uint16_t crc16;
             uint8_t tail[2];
         };
+        #pragma pack(pop)
         
-        // 接收：上位机→底盘
+        // 接收数据在 MCU 内存中的自然对齐表示。线上协议仍为33字节紧凑帧；
+        // 解析时按字段复制，避免访问线上未对齐的float地址。
         struct BoardRX
         {
             uint8_t header[2];
@@ -57,12 +63,13 @@ class BoardCommunication
             uint16_t crc16;
             uint8_t tail[2];
         };
-        #pragma pack(pop)
 
         static_assert(sizeof(BoardTX) == TX_FRAME_SIZE, "BoardTX协议帧长度必须为94字节");
-        static_assert(sizeof(BoardRX) == RX_FRAME_SIZE, "BoardRX协议帧长度必须为33字节");
+        static_assert(sizeof(BoardRX) == 36, "BoardRX内存结构布局错误");
+        static_assert(offsetof(BoardRX, leg_position_target) == 8, "BoardRX关节目标未对齐");
+        static_assert(offsetof(BoardRX, wheel_velocity_target) == 24, "BoardRX轮速目标偏移错误");
         static_assert(offsetof(BoardTX, crc16) == 90, "BoardTX CRC偏移错误");
-        static_assert(offsetof(BoardRX, crc16) == 29, "BoardRX CRC偏移错误");
+        static_assert(offsetof(BoardRX, crc16) == 32, "BoardRX内存CRC偏移错误");
 
         BoardTX board_tx_;
         BoardRX board_rx_;
@@ -95,9 +102,9 @@ class BoardCommunication
                 return false;
             }
 
-            const uint16_t received_crc = static_cast<uint16_t>(frame[29]) |
-                                          (static_cast<uint16_t>(frame[30]) << 8);
-            return received_crc == calculateCRC16(frame, 29);
+            const uint16_t received_crc = static_cast<uint16_t>(frame[RX_CRC_OFFSET]) |
+                                          (static_cast<uint16_t>(frame[RX_CRC_OFFSET + 1]) << 8);
+            return received_crc == calculateCRC16(frame, RX_CRC_OFFSET);
         }
 
     public:
@@ -164,7 +171,20 @@ class BoardCommunication
                 {
                     if (validateRXFrame(rx_frame_buffer_))
                     {
-                        memcpy(&board_rx_, rx_frame_buffer_, sizeof(board_rx_));
+                        memcpy(board_rx_.header, rx_frame_buffer_, sizeof(board_rx_.header));
+                        memcpy(&board_rx_.frame_seq, rx_frame_buffer_ + 2,
+                               sizeof(board_rx_.frame_seq));
+                        board_rx_.control_enable = rx_frame_buffer_[4];
+                        memcpy(board_rx_.leg_position_target,
+                               rx_frame_buffer_ + RX_LEG_TARGET_OFFSET,
+                               sizeof(board_rx_.leg_position_target));
+                        memcpy(board_rx_.wheel_velocity_target,
+                               rx_frame_buffer_ + RX_WHEEL_TARGET_OFFSET,
+                               sizeof(board_rx_.wheel_velocity_target));
+                        memcpy(&board_rx_.crc16, rx_frame_buffer_ + RX_CRC_OFFSET,
+                               sizeof(board_rx_.crc16));
+                        memcpy(board_rx_.tail, rx_frame_buffer_ + RX_TAIL_OFFSET,
+                               sizeof(board_rx_.tail));
                         updateTimestamp();
                     }
                     rx_frame_length_ = 0;

@@ -97,7 +97,7 @@ void CanTask(void const* argument)
         motor_control_logic(loop_count);
         dm_motor_control_logic();
 
-        osDelay(1);
+        osDelay(2);
     }
 }
 }
