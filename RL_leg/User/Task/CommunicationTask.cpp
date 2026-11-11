@@ -3,6 +3,7 @@
 #include "VmcVelocityEstimator.hpp"
 #include "uart_device.hpp"
 #include <cstdint>
+#include <cmath>
 
 /* 通讯数据缓存 ---------------------------------------------------------------------------------------------*/
 uint8_t BoardRx_buffer[BoardCommunication::RX_FRAME_SIZE];
@@ -113,6 +114,10 @@ void UART_TX()
         RightDmMotors.getVelocityRads(1), RightDmMotors.getVelocityRads(2),
         Motor3508.getVelocityRads(2), Motor3508.getVelocityRads(1),
         HI12.GetAngle(1) * deg_to_rad, HI12.GetGyro(0) * deg_to_rad);
+    // status_flags bit 0 means base_forward_velocity is valid; it must not
+    // depend on the chassis DISABLED / MOTOR_ENABLE / CONTROL state.
+    Cboard.board_tx_.status_flags =
+        std::isfinite(Cboard.board_tx_.base_forward_velocity) ? 0x01U : 0x00U;
 
     Cboard.prepareTXFrame();
     memcpy(BoardTx_buffer, &Cboard.board_tx_, sizeof(Cboard.board_tx_));

@@ -169,7 +169,6 @@ void ChassisController::Update(const OperatorInput& input)
         Cboard.board_tx_.remote_command.yaw_rate = 0.0f;
     }
     Cboard.board_tx_.remote_command.height = height_target_m_;
-    Cboard.board_tx_.status_flags = control_state ? 0x01 : 0x00;
 
     if (!command_active)
     {
