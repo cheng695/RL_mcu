@@ -24,8 +24,8 @@ constexpr float JOINT_MIT_KD = 2.0f;
 
 /* 沿用工程中原有的3508速度环参数，输出单位为电调电流指令。 */
 ALG::PID::PID wheel_pid[2] = {
-    ALG::PID::PID(700.0f, 0.0f, 0.0f, 16384.0f, 2500.0f, 100.0f),
-    ALG::PID::PID(700.0f, 0.0f, 0.0f, 16384.0f, 2500.0f, 100.0f)};
+    ALG::PID::PID(0.2f, 0.0f, 0.0f, 16384.0f, 2500.0f, 100.0f),
+    ALG::PID::PID(0.2f, 0.0f, 0.0f, 16384.0f, 2500.0f, 100.0f)};
 
 bool IsValidCommand(const BoardCommunication::BoardRX& command)
 {

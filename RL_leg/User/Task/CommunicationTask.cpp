@@ -85,9 +85,9 @@ void UART_TX()
     Cboard.board_tx_.leg_position[2] = RightDmMotors.getAngleRadZeroed(2);  //左
     Cboard.board_tx_.leg_position[3] = -LeftDmMotors.getAngleRadZeroed(1);
 
-    Cboard.board_tx_.leg_velocity[0] = RightDmMotors.getVelocityRads(2);  //左
+    Cboard.board_tx_.leg_velocity[0] = RightDmMotors.getVelocityRads(1);  //左
     Cboard.board_tx_.leg_velocity[1] = -LeftDmMotors.getVelocityRads(2);
-    Cboard.board_tx_.leg_velocity[2] = RightDmMotors.getVelocityRads(1);  //左
+    Cboard.board_tx_.leg_velocity[2] = RightDmMotors.getVelocityRads(2);  //左
     Cboard.board_tx_.leg_velocity[3] = -LeftDmMotors.getVelocityRads(1);
 
     Cboard.board_tx_.wheel_velocity[0] = -Motor3508.getVelocityRads(1);
